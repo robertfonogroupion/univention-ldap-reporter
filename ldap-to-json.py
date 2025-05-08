@@ -1,6 +1,7 @@
 import sys
 import json
 import re
+import argparse
 
 FIELDS_TO_INCLUDE = [
     'uid',
@@ -58,12 +59,12 @@ def parse_user_blocks(file_path):
     return users
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python3 ldap-to-json.py <input_file>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Parse Univention LDAP export to JSON.')
+    parser.add_argument('-u', '--users', required=True, help='Path to users.txt export file')
+    args = parser.parse_args()
 
-    input_file = sys.argv[1]
-    users = parse_user_blocks(input_file)
+    users = parse_user_blocks(args.users)
+    
     print(json.dumps(users, indent=4, ensure_ascii=False))
 
 if __name__ == "__main__":
