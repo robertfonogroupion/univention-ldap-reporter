@@ -9,12 +9,15 @@ FIELDS_TO_INCLUDE = [
     'e-mail',
     'groups',
     'disabled',
-
 ]
 
 def extract_group_name(dn_string):
     match = re.match(r'cn=([^,]+)', dn_string, re.IGNORECASE)
     return match.group(1) if match else dn_string
+
+def extract_uid(dn_line):
+    match = re.search(r'uid=([^,]+)', dn_line)
+    return match.group(1) if match else None
 
 def parse_user_blocks(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -27,8 +30,10 @@ def parse_user_blocks(file_path):
         lines = block.strip().split('\n')
         user_data = {}
         dn_line = lines[0].strip()
-        user_data['DN'] = dn_line  # always include DN
-        
+        uid = extract_uid(dn_line)
+        if uid:
+            user_data['uid'] = uid
+
         for line in lines[1:]:
             if not line.strip() or ':' not in line:
                 continue
