@@ -9,6 +9,8 @@ FIELDS_TO_INCLUDE = [
     'e-mail',
     'groups',
     'disabled',
+    "oxDepartment",
+    "oxPosition",
 ]
 
 def extract_group_name(dn_string):
