@@ -111,6 +111,14 @@ def parse_ldap_blocks(file_path, is_user=True):
     return entries
 
 def normalize_structure(data, include_disabled=False):
+    # enabled users list for filtering out disabled users later
+    enabled_uids = set()
+    for user in data.get('users', []):
+        uid = user.get('uid')
+        if uid and (include_disabled or str(user.get('disabled', '0')) != '1'):
+            enabled_uids.add(uid)
+
+
     all_users = set()
     all_groups = set()
     group_parents = defaultdict(set)   # group → parent groups
@@ -132,8 +140,10 @@ def normalize_structure(data, include_disabled=False):
         if not gname:
             continue
         for uid in force_list(group.get('users')):
-            user_direct[uid].add(gname)
-            all_users.add(uid)
+            if uid in enabled_uids:
+                user_direct[uid].add(gname)
+                all_users.add(uid)
+
 
     # Add direct groups from user objects
     for user in data.get('users', []):
@@ -159,6 +169,10 @@ def normalize_structure(data, include_disabled=False):
         return visited
 
     # Compute indirect memberships per user
+    for uid in list(user_direct.keys()):  # Use list() to avoid modifying dict while iterating
+        if uid not in enabled_uids:
+            del user_direct[uid]
+
     for uid in user_direct:
         indirect = set()
         for g in user_direct[uid]:
