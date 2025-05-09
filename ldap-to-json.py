@@ -148,9 +148,10 @@ def normalize_structure(data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Parse Univention user and group exports to combined JSON.')
+    parser = argparse.ArgumentParser(description='Parse Univention user and group exports to combined output of group memberships.')
     parser.add_argument('-u', '--users', required=True, help='Path to user export file')
     parser.add_argument('-g', '--groups', required=True, help='Path to group export file')
+    parser.add_argument('-f', '--format', choices=['json', 'csv'], default='json', help='Output format (json or csv)')
     args = parser.parse_args()
 
     users = parse_ldap_blocks(args.users, is_user=True)
@@ -161,7 +162,10 @@ def main():
         'groups': groups
     })
 
-    print(json.dumps(result, indent=4, ensure_ascii=False))
+    if args.format == 'json':
+        print(json.dumps(result, indent=4, ensure_ascii=False))
+    elif args.format == 'csv':
+        print("CSV output not implemented yet.")
 
 if __name__ == "__main__":
     main()
