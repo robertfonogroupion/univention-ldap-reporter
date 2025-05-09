@@ -2,6 +2,7 @@ import sys
 import json
 import re
 import argparse
+from collections import defaultdict
 
 FIELDS_USERS = [
     'username', 'displayName', 'e-mail', 'groups',
@@ -11,6 +12,13 @@ FIELDS_USERS = [
 FIELDS_GROUPS = [
     'name', 'description', 'memberOf', 'users'
 ]
+
+def force_list(val):
+    if isinstance(val, list):
+        return val
+    elif val:
+        return [val]
+    return []
 
 def extract_uid(dn_line):
     match = re.search(r'uid=([^,]+)', dn_line)
@@ -73,33 +81,70 @@ def parse_ldap_blocks(file_path, is_user=True):
 def normalize_structure(data):
     all_users = set()
     all_groups = set()
-    user_group_map = {}
+    group_parents = defaultdict(set)   # group → parent groups
+    user_direct = defaultdict(set)     # uid → direct groups
+    user_indirect = defaultdict(set)   # uid → indirect groups
 
-    # Collect from user entries
+    # Build group → parent groups
+    for group in data.get('groups', []):
+        gname = group.get('name')
+        if gname:
+            all_groups.add(gname)
+            for parent in force_list(group.get('memberOf')):
+                group_parents[gname].add(parent)
+                all_groups.add(parent)
+
+    # Direct user→group from groups[]
+    for group in data.get('groups', []):
+        gname = group.get('name')
+        if not gname:
+            continue
+        for uid in force_list(group.get('users')):
+            user_direct[uid].add(gname)
+            all_users.add(uid)
+
+    # Add direct groups from user objects
     for user in data.get('users', []):
         uid = user.get('uid')
-        if uid:
-            all_users.add(uid)
-        for group in user.get('groups', []):
-            all_groups.add(group)
+        if not uid:
+            continue
+        all_users.add(uid)
+        for g in force_list(user.get('groups')):
+            user_direct[uid].add(g)
+            all_groups.add(g)
 
-    # Collect from group entries
-    for group in data.get('groups', []):
-        group_name = group.get('name')
-        if group_name:
-            all_groups.add(group_name)
-        for parent_group in group.get('memberOf', []):
-            all_groups.add(parent_group)
-        for uid in group.get('users', []):
-            all_users.add(uid)
-            user_group_map.setdefault(uid, []).append(group_name)
+    # Transitive parent resolution
+    def get_all_parents(group, visited=None):
+        if visited is None:
+            visited = set()
+        for parent in group_parents.get(group, []):
+            if parent not in visited:
+                visited.add(parent)
+                get_all_parents(parent, visited)
+        return visited
 
-    # Sort output for readability
-    return {
+    # Compute indirect memberships per user
+    for uid in user_direct:
+        indirect = set()
+        for g in user_direct[uid]:
+            indirect |= get_all_parents(g)
+        # Exclude any already direct memberships
+        user_indirect[uid] = indirect - user_direct[uid]
+
+    # Output format
+    result = {
         "users": sorted(all_users),
         "groups": sorted(all_groups),
-        "user_group_membership": {k: sorted(v) for k, v in user_group_map.items()}
+        "user_group_membership": {
+            uid: {
+                "direct": sorted(user_direct[uid]),
+                "indirect": sorted(user_indirect[uid])
+            } for uid in sorted(all_users)
+        }
     }
+    return result
+
+
 
 
 def main():
