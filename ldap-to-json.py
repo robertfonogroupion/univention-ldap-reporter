@@ -110,7 +110,7 @@ def parse_ldap_blocks(file_path, is_user=True):
 
     return entries
 
-def normalize_structure(data):
+def normalize_structure(data, include_disabled=False):
     all_users = set()
     all_groups = set()
     group_parents = defaultdict(set)   # group → parent groups
@@ -137,6 +137,8 @@ def normalize_structure(data):
 
     # Add direct groups from user objects
     for user in data.get('users', []):
+        if not include_disabled and str(user.get('disabled', '0')) == '1':
+            continue
         uid = user.get('uid')
         if not uid:
             continue
@@ -144,6 +146,7 @@ def normalize_structure(data):
         for g in force_list(user.get('groups')):
             user_direct[uid].add(g)
             all_groups.add(g)
+
 
     # Transitive parent resolution
     def get_all_parents(group, visited=None):
@@ -209,8 +212,6 @@ def export_csv_matrix(normalized_data, output_file=None):
         writer = csv.writer(sys.stdout, delimiter=';')
         writer.writerows(output)
 
-
-
 def main():
     parser = argparse.ArgumentParser(description='Parse Univention user and group exports to combined output of group memberships.')
     parser.add_argument('-u', '--users', required=True, help='Path to user export file')
@@ -222,13 +223,11 @@ def main():
 
     users = parse_ldap_blocks(args.users, is_user=True)
     groups = parse_ldap_blocks(args.groups, is_user=False)
-    if not args.includeDisabled:
-        users = [u for u in users if str(u.get('disabled', '0')) != '1']
 
     result = normalize_structure({
         'users': users,
         'groups': groups
-    })
+    }, include_disabled=args.includeDisabled)
 
     result = prune_unused_groups_and_users(result)
 
