@@ -29,6 +29,37 @@ def extract_cn(dn_line):
     match = re.search(r'cn=([^,]+)', dn_line)
     return match.group(1) if match else dn_line
 
+def prune_unused_groups_and_users(normalized_data):
+    # 1. Keep only groups used by at least one user
+    used_groups = set()
+    for membership in normalized_data['user_group_membership'].values():
+        used_groups.update(membership.get('direct', []))
+        used_groups.update(membership.get('indirect', []))
+
+    # Prune the group list
+    normalized_data['groups'] = sorted(g for g in normalized_data['groups'] if g in used_groups)
+
+    # 2. Prune groups from user membership entries
+    pruned_membership = {}
+    used_users = set()
+
+    for uid, membership in normalized_data['user_group_membership'].items():
+        direct = [g for g in membership.get('direct', []) if g in used_groups]
+        indirect = [g for g in membership.get('indirect', []) if g in used_groups]
+
+        if direct or indirect:
+            pruned_membership[uid] = {
+                'direct': sorted(direct),
+                'indirect': sorted(indirect)
+            }
+            used_users.add(uid)
+
+    # Replace user membership and user list
+    normalized_data['user_group_membership'] = pruned_membership
+    normalized_data['users'] = sorted(used_users)
+
+    return normalized_data
+
 def parse_ldap_blocks(file_path, is_user=True):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -184,7 +215,7 @@ def main():
     parser = argparse.ArgumentParser(description='Parse Univention user and group exports to combined output of group memberships.')
     parser.add_argument('-u', '--users', required=True, help='Path to user export file')
     parser.add_argument('-g', '--groups', required=True, help='Path to group export file')
-    parser.add_argument('-f', '--format', choices=['json', 'csv'], default='json', help='Output format (json or csv)')
+    parser.add_argument('-f', '--format', choices=['json', 'csv'], default='csv', help='Output format (json or csv)')
     parser.add_argument('-o', '--output', help='Output file path (optional, defaults to stdout)')
     args = parser.parse_args()
 
@@ -195,6 +226,8 @@ def main():
         'users': users,
         'groups': groups
     })
+
+    result = prune_unused_groups_and_users(result)
 
     if args.format == 'json':
         if args.output:
