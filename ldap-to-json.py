@@ -7,7 +7,7 @@ import csv
 
 FIELDS_USERS = [
     'username', 'displayName', 'e-mail', 'groups',
-    'oxDepartment', 'oxPosition'
+    'oxDepartment', 'oxPosition', 'disabled'
 ]
 
 FIELDS_GROUPS = [
@@ -217,10 +217,13 @@ def main():
     parser.add_argument('-g', '--groups', required=True, help='Path to group export file')
     parser.add_argument('-f', '--format', choices=['json', 'csv'], default='csv', help='Output format (json or csv)')
     parser.add_argument('-o', '--output', help='Output file path (optional, defaults to stdout)')
+    parser.add_argument('--includeDisabled', action='store_true', help='Include users marked as disabled (default: exclude)')
     args = parser.parse_args()
 
     users = parse_ldap_blocks(args.users, is_user=True)
     groups = parse_ldap_blocks(args.groups, is_user=False)
+    if not args.includeDisabled:
+        users = [u for u in users if str(u.get('disabled', '0')) != '1']
 
     result = normalize_structure({
         'users': users,
