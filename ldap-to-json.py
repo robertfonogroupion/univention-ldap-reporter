@@ -3,6 +3,7 @@ import json
 import re
 import argparse
 from collections import defaultdict
+import csv
 
 FIELDS_USERS = [
     'username', 'displayName', 'e-mail', 'groups',
@@ -145,6 +146,38 @@ def normalize_structure(data):
     return result
 
 
+def export_csv_matrix(normalized_data, output_file=None):
+    users = sorted(normalized_data['users'])
+    groups = sorted(normalized_data['groups'])
+    memberships = normalized_data['user_group_membership']
+
+    output = []
+
+    # Header: group names
+    header = ['uid'] + groups
+    output.append(header)
+
+    for uid in users:
+        row = [uid]
+        direct = set(memberships.get(uid, {}).get('direct', []))
+        indirect = set(memberships.get(uid, {}).get('indirect', []))
+        for group in groups:
+            if group in direct:
+                row.append("x")
+            elif group in indirect:
+                row.append("i")
+            else:
+                row.append("")
+        output.append(row)
+
+    if output_file:
+        with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerows(output)
+    else:
+        writer = csv.writer(sys.stdout, delimiter=';')
+        writer.writerows(output)
+
 
 
 def main():
@@ -152,6 +185,7 @@ def main():
     parser.add_argument('-u', '--users', required=True, help='Path to user export file')
     parser.add_argument('-g', '--groups', required=True, help='Path to group export file')
     parser.add_argument('-f', '--format', choices=['json', 'csv'], default='json', help='Output format (json or csv)')
+    parser.add_argument('-o', '--output', help='Output file path (optional, defaults to stdout)')
     args = parser.parse_args()
 
     users = parse_ldap_blocks(args.users, is_user=True)
@@ -163,9 +197,13 @@ def main():
     })
 
     if args.format == 'json':
-        print(json.dumps(result, indent=4, ensure_ascii=False))
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=4, ensure_ascii=False)
+        else:
+            print(json.dumps(result, indent=4, ensure_ascii=False))
     elif args.format == 'csv':
-        print("CSV output not implemented yet.")
+        export_csv_matrix(result, output_file=args.output)
 
 if __name__ == "__main__":
     main()
