@@ -6,7 +6,7 @@ Export and format ldap group memberships in easy to digest matrix (csv) format.
 Accepts user and group lists as exported via `udm users/user list > users.txt` and `udm groups/group list > users.txt`
 
 ```
-ldap-to-json.py [-h] -u USERS -g GROUPS [-f {json,csv}] [-o OUTPUT] [--includeDisabled] [--filter FILTER]
+ldap-to-matrix.py [-h] -u USERS -g GROUPS [-f {json,csv}] [-o OUTPUT] [--includeDisabled] [--filter FILTER]
 
 Parse Univention user and group exports to combined output of group
 memberships.
