@@ -21,6 +21,20 @@ def force_list(val):
         return [val]
     return []
 
+def load_exclusion_filter(path):
+    excluded_users = set()
+    excluded_groups = set()
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('user:'):
+                excluded_users.add(line[5:])
+            elif line.startswith('group:'):
+                excluded_groups.add(line[6:])
+    return excluded_users, excluded_groups
+
 def extract_uid(dn_line):
     match = re.search(r'uid=([^,]+)', dn_line)
     return match.group(1) if match else None
@@ -193,6 +207,28 @@ def normalize_structure(data, include_disabled=False):
     }
     return result
 
+def apply_exclusions(normalized_data, excluded_users, excluded_groups):
+    # Remove groups
+    normalized_data['groups'] = [g for g in normalized_data['groups'] if g not in excluded_groups]
+
+    # Remove users + update memberships
+    filtered_membership = {}
+    for uid, membership in normalized_data['user_group_membership'].items():
+        if uid in excluded_users:
+            continue
+        direct = [g for g in membership.get('direct', []) if g not in excluded_groups]
+        indirect = [g for g in membership.get('indirect', []) if g not in excluded_groups]
+        if direct or indirect:
+            filtered_membership[uid] = {
+                'direct': sorted(direct),
+                'indirect': sorted(indirect)
+            }
+
+    normalized_data['user_group_membership'] = filtered_membership
+    normalized_data['users'] = sorted(filtered_membership.keys())
+
+    return normalized_data
+
 
 def export_csv_matrix(normalized_data, output_file=None):
     users = sorted(normalized_data['users'])
@@ -233,6 +269,8 @@ def main():
     parser.add_argument('-f', '--format', choices=['json', 'csv'], default='csv', help='Output format (json or csv)')
     parser.add_argument('-o', '--output', help='Output file path (optional, defaults to stdout)')
     parser.add_argument('--includeDisabled', action='store_true', help='Include users marked as disabled (default: exclude)')
+    parser.add_argument('--filter', help='Path to file listing users/groups to exclude')
+
     args = parser.parse_args()
 
     users = parse_ldap_blocks(args.users, is_user=True)
@@ -244,6 +282,10 @@ def main():
     }, include_disabled=args.includeDisabled)
 
     result = prune_unused_groups_and_users(result)
+
+    if args.filter:
+        excluded_users, excluded_groups = load_exclusion_filter(args.filter)
+        result = apply_exclusions(result, excluded_users, excluded_groups)
 
     if args.format == 'json':
         if args.output:
