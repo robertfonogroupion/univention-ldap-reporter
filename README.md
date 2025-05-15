@@ -1,6 +1,8 @@
 # univention-ldap-reporter
 Export and format ldap group memberships in easy to digest matrix (csv) format.
 
+source: https://github.com/robertfonogroupion/univention-ldap-reporter
+
 ## usage
 
 Accepts user and group lists as exported via `udm users/user list > users.txt` and `udm groups/group list > users.txt`
